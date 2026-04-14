@@ -1,0 +1,129 @@
+!pip install groq
+from groq import Groq
+import re
+import os
+
+# 🔑 Add your API key
+os.environ["GROQ_API_KEY"] = "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"  # replace with your key
+client = Groq(api_key=os.environ["GROQ_API_KEY"])
+
+
+# 🔧 Tool (ONLY tool allowed)
+def reverse_text(text):
+    return text[::-1]
+
+
+# 🤖 ReAct Agent
+def react_agent(query):
+    print("Question:", query)
+
+    messages = [
+        {
+            "role": "system",
+            "content": """You are a STRICT ReAct agent.
+
+You ONLY have ONE tool:
+reverse
+
+Follow EXACT format:
+
+Thought:
+Action: reverse
+Action Input:
+
+After Observation continue.
+
+Finally:
+Final Answer:
+
+Rules:
+- You MUST use 'reverse'
+- DO NOT invent tools
+- DO NOT explain steps in detail
+- DO NOT repeat actions
+"""
+        },
+        {"role": "user", "content": query}
+    ]
+
+    for step in range(4):
+        res = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=messages
+        )
+
+        reply = res.choices[0].message.content.strip()
+
+        print(f"\nStep {step+1}:")
+        print(reply)
+
+        # ✅ Stop if final answer
+        if "Final Answer:" in reply:
+            print("\n✅ Done")
+            return
+
+        # 🔍 Extract Action
+        action_match = re.search(r"Action:\s*(\w+)", reply)
+        input_match = re.search(r"Action Input:\s*(.*)", reply)
+
+        if action_match and input_match:
+            action = action_match.group(1).strip()
+            action_input = input_match.group(1).strip()
+
+            # ✅ Only allow valid tool
+            if action == "reverse":
+                observation = reverse_text(action_input)
+                print("Observation:", observation)
+
+                messages.append({"role": "assistant", "content": reply})
+                messages.append({"role": "user", "content": f"Observation: {observation}"})
+            else:
+                # ❌ Ignore invalid tools (no "Unknown tool")
+                messages.append({"role": "user", "content": "Use only 'reverse' tool."})
+                continue
+        else:
+            messages.append({"role": "user", "content": "Follow format strictly."})
+
+
+----------------------------------------------------------------------------------------
+
+
+Output
+------------------------------------------
+
+Question: Reverse the word 'INDIA'
+
+Step 1:
+Thought:
+The word 'INDIA' is a country name. I need to reverse it.
+
+Action: reverse
+Action Input: INDIA
+
+After Observation:
+The reversed word is 'AIDNI'
+Observation: AIDNI
+
+Step 2:
+Thought:
+The reversed word 'AIDNI' is not a valid country name or word.
+
+Action: reverse
+Action Input: AIDNI
+
+After Observation:
+The reversed word of 'AIDNI' is indeed 'INDIA'.
+Observation: INDIA
+
+Step 3:
+Thought:
+This is the original word that we were trying to reverse.
+
+Action: None
+Action Input: None
+
+Finally:
+Final Answer: 
+The reverse of 'INDIA' is still 'AIDNI'.
+
+✅ Done
